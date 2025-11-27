@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f7fa; }
+        .login-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .login-box { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 50px rgba(0,0,0,0.3); width: 400px; text-align: center; }
+        .login-box h1 { margin-bottom: 10px; color: #333; }
+        .dashboard-page { display: none; }
+        .dashboard-page.show { display: block; }
+        .topbar { background: #667eea; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .sidebar { position: fixed; left: 0; top: 50px; width: 250px; height: calc(100vh - 50px); background: #2c3e50; color: white; overflow-y: auto; }
+        .menu-item { padding: 15px 20px; cursor: pointer; border-left: 3px solid transparent; }
+        .menu-item:hover, .menu-item.active { background: #34495e; border-left-color: #667eea; }
+        .content { margin-left: 250px; padding: 20px; }
+        .section { display: none; }
+        .section.active { display: block; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .stat-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .stat-value { font-size: 32px; font-weight: bold; color: #667eea; }
+        #adminMap { height: 600px; width: 100%; border-radius: 8px; }
+        .employee-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .employee-card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .status-online { color: #28a745; font-weight: bold; }
+        .status-offline { color: #dc3545; font-weight: bold; }
+        .sync-status { position: fixed; bottom: 20px; right: 20px; background: white; padding: 10px 20px; border-radius: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .sync-indicator { width: 10px; height: 10px; border-radius: 50%; background: #28a745; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .btn { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+        .btn:hover { background: #5568d3; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #218838; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .form-group { margin-bottom: 15px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 5px; color: #333; font-weight: bold; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+        .delete-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+        .logout-btn { background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: bold; }
+        .location-item { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #667eea; }
+        .location-item h4 { color: #667eea; margin-bottom: 8px; }
+        .location-item p { color: #666; font-size: 13px; margin: 5px 0; }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN PAGE -->
+    <div id="loginPage" class="login-page">
+        <div class="login-box">
+            <h1>🔐 Admin Login</h1>
+            <p>Sign in with your credentials</p>
+            
+            <div class="form-group" style="margin-top: 20px;">
+                <label>Username</label>
+                <input type="text" id="adminUsername" placeholder="admin">
+            </div>
+            
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="adminPassword" placeholder="Enter password">
+            </div>
+            
+            <button class="btn" onclick="adminLogin()">Sign In</button>
+        </div>
+    </div>
+
+    <!-- DASHBOARD PAGE -->
+    <div id="dashboardPage" class="dashboard-page">
+        <div class="topbar">
+            <div class="topbar-left">
+                <h2>Admin Dashboard</h2>
+                <span class="user-badge" id="userEmail">Admin</span>
+            </div>
+            <button class="logout-btn" onclick="doLogout()">Logout</button>
+        </div>
+        
+        <div class="sidebar">
+            <div class="menu-item active" onclick="showSection('overview')">📊 Overview</div>
+            <div class="menu-item" onclick="showSection('map')">🗺️ Live Map</div>
+            <div class="menu-item" onclick="showSection('locations')">📍 Location Zones</div>
+            <div class="menu-item" onclick="showSection('employees')">👥 Employees</div>
+            <div class="menu-item" onclick="showSection('addEmployee')">➕ Add Employee</div>
+            <div class="menu-item" onclick="showSection('logs')">📋 Logs</div>
+        </div>
+        
+        <div class="content">
+            <!-- OVERVIEW -->
+            <div id="overview" class="section active">
+                <h1>Live Overview</h1>
+                <div class="stats">
+                    <div class="stat-box">
+                        <div class="stat-value" id="totalEmployees">0</div>
+                        <div class="stat-label">Total Employees</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="checkedInCount">0</div>
+                        <div class="stat-label">Checked In Now</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="totalCheckIns">0</div>
+                        <div class="stat-label">Today Check-ins</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="totalLogs">0</div>
+                        <div class="stat-label">Total Logs</div>
+                    </div>
+                </div>
+                <h2>Active Employees (Last 5)</h2>
+                <div class="employee-grid" id="employeeGrid"></div>
+            </div>
+            
+            <!-- LIVE MAP -->
+            <div id="map-section" class="section">
+                <h1>Live Employee Tracking</h1>
+                <div class="card">
+                    <p style="color: #666; margin-bottom: 15px;">📍 Blue circles = All Check-in zones | 🔴 Red markers = Active Employees</p>
+                    <div id="adminMap"></div>
+                </div>
+            </div>
+            
+            <!-- LOCATION ZONES -->
+            <div id="locations" class="section">
+                <h1>📍 Check-in Location Management</h1>
+                
+                <div class="card">
+                    <h2>Add New Check-in Zone</h2>
+                    <div class="form-group">
+                        <label>Location Name *</label>
+                        <input type="text" id="newLocName" placeholder="e.g., Main Office, Warehouse A">
+                    </div>
+                    <div class="form-group">
+                        <label>Latitude *</label>
+                        <input type="number" id="newLocLat" placeholder="30.0444" step="any">
+                    </div>
+                    <div class="form-group">
+                        <label>Longitude *</label>
+                        <input type="number" id="newLocLng" placeholder="31.2357" step="any">
+                    </div>
+                    <div class="form-group">
+                        <label>Radius (meters) *</label>
+                        <input type="number" id="newLocRadius" placeholder="200" value="200">
+                    </div>
+                    <button class="btn btn-success" onclick="addLocation()">Create Location Zone</button>
+                </div>
+                
+                <div class="card" style="margin-top: 20px;">
+                    <h2>Existing Check-in Zones</h2>
+                    <div id="locationsList"></div>
+                </div>
+            </div>
+            
+            <!-- EMPLOYEES -->
+            <div id="employees" class="section">
+                <h1>Employee Management</h1>
+                <div class="card">
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead><tr><th>Name</th><th>Position</th><th>Status</th><th>Username</th><th>Last Seen</th><th>Action</th></tr></thead>
+                            <tbody id="employeeTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ADD EMPLOYEE -->
+            <div id="addEmployee" class="section">
+                <h1>Add New Employee</h1>
+                <div class="card" style="max-width: 600px;">
+                    <div class="form-group"><label>Full Name *</label><input type="text" id="newEmpName"></div>
+                    <div class="form-group"><label>Username *</label><input type="text" id="newEmpUsername"></div>
+                    <div class="form-group"><label>Password *</label><input type="text" id="newEmpPassword"></div>
+                    <div class="form-group"><label>Position</label><input type="text" id="newEmpPosition"></div>
+                    <div class="form-group"><label>Email</label><input type="email" id="newEmpEmail"></div>
+                    <div class="form-group"><label>Phone</label><input type="tel" id="newEmpPhone"></div>
+                    <button class="btn" onclick="addEmployee()">Create Employee</button>
+                    <div id="credentialDisplay" style="display: none; background: #fff3cd; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                        <h4>🔑 Employee Credentials</h4>
+                        <p>Username: <strong id="displayUsername"></strong></p>
+                        <p>Password: <strong id="displayPassword"></strong></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- LOGS -->
+            <div id="logs" class="section">
+                <h1>Attendance Logs</h1>
+                <div class="card">
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead><tr><th>Time</th><th>Employee</th><th>Action</th><th>Location</th><th>Photo</th></tr></thead>
+                            <tbody id="logsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="sync-status"><div class="sync-indicator"></div><span>Live Sync</span></div>
+    </div>
+
+    <script>
+        // ==================== CONFIGURATION ====================
+        // ⚠️⚠️⚠️ REPLACE WITH YOUR ACTUAL GOOGLE SHEETS API URL ⚠️⚠️⚠️
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxkIs_4mM1b4BgZibbtBiHaxfGZrzHvXvqBaL1sqbl1f3bqEcr0IDhtmdzkmv_CUUJB/exec';
+        
+        // Demo admin credentials (use Google Sheets Admins tab in production)
+        const ADMIN_CREDENTIALS = { username: 'admin', password: 'admin123' };
+        
+        // ==================== GLOBAL VARIABLES ====================
+        let currentUser = null;
+        let employees = [];
+        let logs = [];
+        let locations = [];
+        let adminMap = null;
+        let locationMarkers = []; // Track ALL location markers
+        let employeeMarkers = {}; // Track employee markers by ID
+        let pollInterval = null;
+
+        // ==================== API CALL ====================
+        async function apiCall(action, data = {}) {
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action, data })
+                });
+                const result = await response.json();
+                
+                // Debug log
+                if (action === 'get_locations' && result.success) {
+                    console.log(`📍 Loaded ${result.data.length} locations`);
+                }
+                if (action === 'get_employees' && result.success) {
+                    console.log(`👥 Loaded ${result.data.length} employees`);
+                }
+                
+                return result;
+            } catch (error) {
+                console.error('❌ API Error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        // ==================== AUTHENTICATION ====================
+        async function adminLogin() {
+            const username = document.getElementById('adminUsername').value;
+            const password = document.getElementById('adminPassword').value;
+            
+            if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+                currentUser = { username: 'admin' };
+                document.getElementById('loginPage').style.display = 'none';
+                document.getElementById('dashboardPage').classList.add('show');
+                await loadData(); // Wait for initial data
+                startPolling();
+            } else {
+                alert('❌ Invalid admin credentials');
+            }
+        }
+
+        // ==================== DATA LOADING ====================
+        function startPolling() {
+            pollInterval = setInterval(loadData, 5000);
+        }
+
+        async function loadData() {
+            console.log('🔄 Loading data...');
+            await Promise.all([loadEmployees(), loadLogs(), loadLocations()]);
+            
+            updateStats();
+            updateEmployeeGrid();
+            updateEmployeeTable();
+            updateLogsTable();
+            displayLocations();
+            
+            // Update map if it's visible
+            if (adminMap && document.getElementById('map-section').classList.contains('active')) {
+                updateAdminMap();
+            }
+        }
+
+        async function loadEmployees() {
+            const result = await apiCall('get_employees');
+            if (result.success) {
+                employees = result.data;
+                console.log(`✅ Employees loaded: ${employees.filter(e => e.status === 'checked-in').length} active`);
+            }
+        }
+
+        async function loadLogs() {
+            const result = await apiCall('get_logs');
+            if (result.success) logs = result.data;
+        }
+
+        async function loadLocations() {
+            const result = await apiCall('get_locations');
+            if (result.success) {
+                locations = result.data;
+                console.log(`✅ Locations loaded: ${locations.length} zones`);
+            }
+        }
+
+        // ==================== UI UPDATES ====================
+        function updateStats() {
+            document.getElementById('totalEmployees').textContent = employees.length;
+            document.getElementById('checkedInCount').textContent = employees.filter(e => e.status === 'checked-in').length;
+            const todayLogs = logs.filter(log => 
+                new Date(log.timestamp).toDateString() === new Date().toDateString() && 
+                log.action === 'check-in'
+            ).length;
+            document.getElementById('totalCheckIns').textContent = todayLogs;
+            document.getElementById('totalLogs').textContent = logs.length;
+        }
+
+        function updateEmployeeGrid() {
+            const grid = document.getElementById('employeeGrid');
+            const activeEmployees = employees
+                .filter(emp => emp.status === 'checked-in')
+                .sort((a, b) => new Date(b.last_update) - new Date(a.last_update))
+                .slice(0, 5);
+            
+            grid.innerHTML = activeEmployees.map(emp => `
+                <div class="employee-card">
+                    <h3>${emp.name}</h3>
+                    <p>${emp.position || 'Employee'}</p>
+                    <p class="status-online">🟢 Checked In</p>
+                    <small>📍 ${emp.lat ? `${parseFloat(emp.lat).toFixed(4)}, ${parseFloat(emp.lng).toFixed(4)}` : 'No location'}</small><br>
+                    <small>🕒 ${emp.last_update ? new Date(emp.last_update).toLocaleTimeString() : 'Never'}</small>
+                </div>
+            `).join('') || '<p style="color: #999;">No active employees</p>';
+        }
+
+        function updateEmployeeTable() {
+            const tbody = document.getElementById('employeeTableBody');
+            tbody.innerHTML = employees.map(emp => `
+                <tr>
+                    <td>${emp.name}</td>
+                    <td>${emp.position || '-'}</td>
+                    <td class="${emp.status === 'checked-in' ? 'status-online' : 'status-offline'}">${emp.status}</td>
+                    <td>${emp.username}</td>
+                    <td>${emp.last_update ? new Date(emp.last_update).toLocaleString() : 'Never'}</td>
+                    <td><button class="delete-btn" onclick="deleteEmployee('${emp.id}')">Delete</button></td>
+                </tr>
+            `).join('');
+        }
+
+        async function deleteEmployee(id) {
+            if (!confirm('Delete this employee? This cannot be undone.')) return;
+            const result = await apiCall('delete_employee', { id });
+            if (result.success) loadData();
+            else alert('Error: ' + result.error);
+        }
+
+        async function addEmployee() {
+            const emp = {
+                name: document.getElementById('newEmpName').value,
+                username: document.getElementById('newEmpUsername').value,
+                password: document.getElementById('newEmpPassword').value,
+                position: document.getElementById('newEmpPosition').value,
+                email: document.getElementById('newEmpEmail').value,
+                phone: document.getElementById('newEmpPhone').value
+            };
+            
+            if (!emp.username || !emp.password || !emp.name) {
+                alert('❌ Fill all required fields');
+                return;
+            }
+            
+            const result = await apiCall('add_employee', emp);
+            if (result.success) {
+                document.getElementById('displayUsername').textContent = emp.username;
+                document.getElementById('displayPassword').textContent = emp.password;
+                document.getElementById('credentialDisplay').style.display = 'block';
+                document.querySelectorAll('#addEmployee input').forEach(i => i.value = '');
+                loadData();
+            } else {
+                alert('Error: ' + result.error);
+            }
+        }
+
+        function displayLocations() {
+            const list = document.getElementById('locationsList');
+            if (locations.length === 0) {
+                list.innerHTML = '<p style="color: #666; padding: 20px; text-align: center;">No zones added yet.</p>';
+                return;
+            }
+            list.innerHTML = locations.map(loc => `
+                <div class="location-item">
+                    <h4>📍 ${loc.name}</h4>
+                    <p><strong>Coordinates:</strong> ${parseFloat(loc.lat).toFixed(6)}, ${parseFloat(loc.lng).toFixed(6)}</p>
+                    <p><strong>Radius:</strong> ${loc.radius} meters</p>
+                </div>
+            `).join('');
+        }
+
+        async function addLocation() {
+            const name = document.getElementById('newLocName').value.trim();
+            const lat = parseFloat(document.getElementById('newLocLat').value);
+            const lng = parseFloat(document.getElementById('newLocLng').value);
+            const radius = parseInt(document.getElementById('newLocRadius').value) || 200;
+            
+            if (!name || isNaN(lat) || isNaN(lng)) {
+                alert('❌ Please fill all required fields with valid values');
+                return;
+            }
+            
+            const result = await apiCall('add_location', { name, lat, lng, radius });
+            if (result.success) {
+                alert('✅ Location zone added!');
+                document.getElementById('newLocName').value = '';
+                document.getElementById('newLocLat').value = '';
+                document.getElementById('newLocLng').value = '';
+                document.getElementById('newLocRadius').value = '200';
+                loadData();
+            } else {
+                alert('Error: ' + result.error);
+            }
+        }
+
+        function showSection(section) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            document.getElementById(section === 'map' ? 'map-section' : section).classList.add('active');
+            event.target.classList.add('active');
+            
+            if (section === 'map') {
+                setTimeout(() => {
+                    initAdminMap();
+                }, 100);
+            }
+        }
+
+        // ==================== MAP FUNCTIONS ====================
+        function initAdminMap() {
+            console.log('🗺️ Initializing admin map...');
+            
+            // Don't reinitialize if already exists
+            if (adminMap) {
+                updateAdminMap();
+                return;
+            }
+            
+            // Wait for locations to load
+            if (locations.length === 0) {
+                console.warn('⚠️ No locations loaded yet');
+                alert('No locations found. Please add at least one check-in zone first.');
+                return;
+            }
+            
+            // Create map centered on first location
+            const center = locations[0];
+            adminMap = L.map('adminMap').setView([center.lat, center.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(adminMap);
+            
+            console.log('✅ Map initialized');
+            
+            // Initial render
+            updateAdminMap();
+        }
+
+        function updateAdminMap() {
+            if (!adminMap) {
+                console.error('❌ Map not initialized yet');
+                return;
+            }
+            
+            console.log(`🔄 Updating map: ${locations.length} locations, ${employees.length} employees`);
+            
+            // ===== CLEAR EXISTING MARKERS =====
+            locationMarkers.forEach(marker => adminMap.removeLayer(marker));
+            locationMarkers = [];
+            
+            // Clear markers for checked-out employees
+            Object.keys(employeeMarkers).forEach(key => {
+                const emp = employees.find(e => e.id === key);
+                if (!emp || emp.status !== 'checked-in') {
+                    adminMap.removeLayer(employeeMarkers[key]);
+                    delete employeeMarkers[key];
+                }
+            });
+            
+            // ===== ADD ALL LOCATION ZONES =====
+            console.log('📍 Adding location zones to map...');
+            locations.forEach((loc, index) => {
+                try {
+                    const marker = L.marker([loc.lat, loc.lng])
+                        .addTo(adminMap)
+                        .bindPopup(`<b>${loc.name}</b><br>Radius: ${loc.radius}m`);
+                    locationMarkers.push(marker);
+                    
+                    const circle = L.circle([loc.lat, loc.lng], {
+                        color: '#667eea',
+                        fillColor: '#667eea',
+                        fillOpacity: 0.15,
+                        radius: loc.radius
+                    }).addTo(adminMap);
+                    locationMarkers.push(circle);
+                    
+                    console.log(`  ✅ Added location ${index + 1}: ${loc.name}`);
+                } catch (e) {
+                    console.error(`  ❌ Error adding location ${index + 1}:`, e);
+                }
+            });
+            
+            // ===== ADD ACTIVE EMPLOYEES =====
+            const activeEmployees = employees.filter(emp => emp.status === 'checked-in' && emp.lat && emp.lng);
+            console.log(`👥 Adding ${activeEmployees.length} active employees to map...`);
+            
+            activeEmployees.forEach(emp => {
+                try {
+                    if (employeeMarkers[emp.id]) {
+                        // Update existing marker
+                        employeeMarkers[emp.id].setLatLng([emp.lat, emp.lng]);
+                        console.log(`  🔄 Updated ${emp.name} position`);
+                    } else {
+                        // Create new marker
+                        const marker = L.marker([emp.lat, emp.lng], {
+                            icon: L.divIcon({
+                                className: 'employee-marker',
+                                html: `<div style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 20px; font-weight: bold; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">${emp.name}</div>`,
+                                iconSize: [100, 30],
+                                iconAnchor: [50, 15]
+                            })
+                        }).addTo(adminMap);
+                        
+                        marker.bindPopup(`
+                            <b>${emp.name}</b><br>
+                            Position: ${emp.position || '-'}<br>
+                            Status: <span style="color: #28a745;">Checked In</span><br>
+                            📍 ${parseFloat(emp.lat).toFixed(6)}, ${parseFloat(emp.lng).toFixed(6)}<br>
+                            🕒 ${new Date(emp.last_update).toLocaleString()}
+                        `);
+                        
+                        employeeMarkers[emp.id] = marker;
+                        console.log(`  ✅ Added ${emp.name} to map`);
+                    }
+                } catch (e) {
+                    console.error(`  ❌ Error adding employee ${emp.name}:`, e);
+                }
+            });
+            
+            // ===== ADJUST MAP BOUNDS =====
+            if (locationMarkers.length > 0) {
+                try {
+                    const group = new L.featureGroup(locationMarkers);
+                    adminMap.fitBounds(group.getBounds().pad(0.2));
+                    console.log('🎯 Map bounds adjusted');
+                } catch (e) {
+                    console.warn('⚠️ Could not adjust bounds:', e);
+                }
+            }
+            
+            console.log('✅ Map update complete');
+        }
+
+        function updateLogsTable() {
+            const tbody = document.getElementById('logsTableBody');
+            tbody.innerHTML = logs.slice(0, 100).map(log => `
+                <tr>
+                    <td>${new Date(log.timestamp).toLocaleString()}</td>
+                    <td>${log.employee_name}</td>
+                    <td><span class="${log.action === 'check-in' ? 'status-online' : 'status-offline'}">${log.action}</span></td>
+                    <td>${log.lat ? `${parseFloat(log.lat).toFixed(4)}, ${parseFloat(log.lng).toFixed(4)}` : '-'}</td>
+                    <td>${log.photo_url ? `<a href="${log.photo_url}" target="_blank">📷 View Photo</a>` : '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function doLogout() {
+            clearInterval(pollInterval);
+            location.reload();
+        }
+    </script>
+</body>
+</html>
